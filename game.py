@@ -73,8 +73,19 @@ class MapGenerator:
         for attempt in range(50):
             self.map = [[None for _ in range(self.width)] for _ in range(self.height)]
             self.wall_count = 0
+            self.eagle_opening = None
+            self.eagle_ring = []
+            neighbors = [p for p in self.get_neighbors(self.eagle) if self.in_bounds(p)]
+            cardinal_neighbors = [
+                (self.eagle[0], self.eagle[1] - 1),
+                (self.eagle[0], self.eagle[1] + 1),
+                (self.eagle[0] - 1, self.eagle[1]),
+                (self.eagle[0] + 1, self.eagle[1]),
+            ]
+            cardinal_neighbors = [p for p in cardinal_neighbors if self.in_bounds(p)]
+            self.eagle_opening = self.rng.choice(cardinal_neighbors)
+            self.eagle_ring = [p for p in neighbors if p != self.eagle_opening]
             self.assign_border_and_fixed()
-            self.eagle_ring = [p for p in self.get_neighbors(self.eagle) if self.in_bounds(p)]
             self.positions = self.build_position_order()
             if self.backtrack(0):
                 return self.finalize_map()
@@ -116,11 +127,21 @@ class MapGenerator:
         for spawn in self.spawns:
             sx, sy = spawn
             self.map[sy][sx] = EMPTY
+            if sy == 0 and self.in_bounds((sx, sy + 1)) and self.map[sy + 1][sx] == STEEL:
+                self.map[sy + 1][sx] = EMPTY
+            if sy == self.height - 1 and self.in_bounds((sx, sy - 1)) and self.map[sy - 1][sx] == STEEL:
+                self.map[sy - 1][sx] = EMPTY
+            if sx == 0 and self.in_bounds((sx + 1, sy)) and self.map[sy][sx + 1] == STEEL:
+                self.map[sy][sx + 1] = EMPTY
+            if sx == self.width - 1 and self.in_bounds((sx - 1, sy)) and self.map[sy][sx - 1] == STEEL:
+                self.map[sy][sx - 1] = EMPTY
 
         px, py = self.player_start
         self.map[py][px] = EMPTY
         ex, ey = self.eagle
         self.map[ey][ex] = EAGLE
+        for px, py in self.eagle_ring:
+            self.map[py][px] = self.rng.choice([BRICK, STEEL])
 
     def build_position_order(self):
         positions = []
@@ -153,6 +174,8 @@ class MapGenerator:
         return False
 
     def get_domain_for_position(self, pos):
+        if pos == self.eagle_opening:
+            return [EMPTY, FOREST]
         if pos in self.eagle_ring:
             return self.rng.sample([BRICK, STEEL], 2)
 
@@ -230,6 +253,8 @@ class MapGenerator:
                 nx, ny = x + dx, y + dy
                 if not (0 <= nx < self.width and 0 <= ny < self.height):
                     continue
+                if (nx, ny) == goal:
+                    return True
                 if (nx, ny) in seen:
                     continue
                 tile = self.tile_value((nx, ny), treat_unassigned_as_empty)
